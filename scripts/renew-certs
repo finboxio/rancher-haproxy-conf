@@ -48,7 +48,6 @@ if [[ "$LEADER" == "$UUID" ]]; then
     --keep-until-expiring \
     --expand \
     --renew-with-new-domains \
-    --dry-run \
     --deploy-hook /etc/rancher-conf/scripts/reload-haproxy"
 
   if [[ "${LETSENCRYPT_EMAIL}" != "" ]]; then
@@ -65,7 +64,7 @@ if [[ "$LEADER" == "$UUID" ]]; then
   cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > ${CERT_DIR}/live/${CERT_NAME}/combined.pem
 
   if [[ "$S3_BUCKET" != "" ]]; then
-    s3-push
+    s3-push --delete
   fi
 else
   # Pull the latest certificate
@@ -76,7 +75,7 @@ else
   fi
 
   if [[ "$S3_BUCKET" != "" ]]; then
-    s3-pull
+    s3-pull --delete
   fi
 
   if [[ -e ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ]]; then

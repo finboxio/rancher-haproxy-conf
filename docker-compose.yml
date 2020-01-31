@@ -2,8 +2,8 @@ version: '2'
 services:
   conf:
     build: .
-    environment:
-      RANCHER_GEN_METADATA_URL: https://metadata.staging.finbox.io
+    env_file:
+      - .env
     entrypoint:
       - rancher-conf
       - --config

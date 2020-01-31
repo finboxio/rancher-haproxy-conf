@@ -1,14 +1,22 @@
-version: '3'
+version: '2'
 services:
   conf:
     build: .
+    environment:
+      RANCHER_GEN_METADATA_URL: https://metadata.staging.finbox.io
     entrypoint:
       - rancher-conf
-      - --metadata-url
-      - https://metadata.staging.finbox.io
       - --config
       - /etc/rancher-conf/config.toml
     volumes:
-      - ./conf:/etc/rancher-conf/haproxy
+      - ./haproxy:/etc/rancher-conf/haproxy
       - ./templates:/etc/rancher-conf/templates
       - ./scripts:/etc/rancher-conf/scripts
+  haproxy:
+    image: haproxy:alpine
+    entrypoint: /opt/rancher/bin/run.sh
+    ports:
+      - 9090:9090
+      - 9091:9091
+    volumes_from:
+      - conf

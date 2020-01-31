@@ -22,23 +22,23 @@ cat /etc/rancher-conf/haproxy/state.yml \
       }' \
   | jq -s '.' \
   | yq r - \
-  | yq p frontends \
+  | yq p - frontends \
   > /etc/rancher-conf/haproxy/haproxy.yml
 
 yq r /etc/rancher-conf/haproxy/state.yml defaults \
-  | yq p defaults \
+  | yq p - defaults \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
 
 yq r /etc/rancher-conf/haproxy/state.yml global \
-  | yq p global \
+  | yq p - global \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
 
 yq r /etc/rancher-conf/haproxy/state.yml health \
-  | yq p health \
+  | yq p - health \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
 
 yq r /etc/rancher-conf/haproxy/state.yml stats \
-  | yq p stats \
+  | yq p - stats \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
 
 if [[ "$S3_BUCKET" != "" ]]; then
@@ -48,6 +48,12 @@ else
   CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy}
 fi
 
-yq w -i /etc/rancher-conf/haproxy/haproxy.yml cert_file $CERT_DIR/live/$CERT_NAME/fullchain.pem
+yq w -i /etc/rancher-conf/haproxy/haproxy.yml cert_file $CERT_DIR/live/$CERT_NAME/combined.pem
 
-gotpl /etc/rancher-conf/templates/haproxy.cfg.tmpl /etc/rancher-conf/haproxy/haproxy.yml > /etc/rancher-conf/haproxy/haproxy.cfg
+gotpl /etc/rancher-conf/templates/haproxy.cfg.tmpl \
+  < /etc/rancher-conf/haproxy/haproxy.yml \
+  > /etc/rancher-conf/haproxy/.haproxy.cfg
+
+/etc/rancher-conf/scripts/check-haproxy /etc/rancher-conf/haproxy/.haproxy.cfg \
+  && mv /etc/rancher-conf/haproxy/.haproxy.cfg /etc/rancher-conf/haproxy/haproxy.cfg \
+  && /etc/rancher-conf/scripts/reload-haproxy

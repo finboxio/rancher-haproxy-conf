@@ -1,6 +1,7 @@
 global
   stats socket /var/run/haproxy.sock mode 777 expose-fd listeners level user
   log stdout format raw local0 info
+  tune.ssl.default-dh-param 2048
   {{- range .global }}
   {{ . }}
   {{- end }}
@@ -9,57 +10,76 @@ defaults
   timeout connect 5000
   timeout client  50000
   timeout server  50000
+
   errorfile 500 /etc/rancher-conf/haproxy/500.http
   errorfile 502 /etc/rancher-conf/haproxy/502.http
   errorfile 503 /etc/rancher-conf/haproxy/503.http
   errorfile 504 /etc/rancher-conf/haproxy/504.http
+
   {{- range .defaults }}
   {{ . }}
   {{- end }}
 
-{{ if .stats }}
+{{- if .stats }}
+
+####################################################################################
+# START stats
+####################################################################################
+
 listen stats
-  bind 0.0.0.0:{{ if .stats.port }}{{ .stats.port }}{{ else }}9090{{ end }}
+  bind *:{{ if .stats.port }}{{ .stats.port }}{{ else }}9090{{ end }} alpn h2,http/1.1
   mode http
   stats uri {{ if .stats.path }}{{ .stats.path }}{{ else }}/{{ end }}
   stats admin if {{ if .stats.admin -}} TRUE {{ else -}} FALSE {{ end }}
-{{ end }}
 
-####
+#####
+# END stats
+#####
+{{- end -}}
+
+{{- if .health }}
+
+####################################################################################
 # START live-check
-####
+####################################################################################
 
-{{ if .health }}
 frontend live_check
   bind *:{{ .health.port }}
   mode http
   monitor-uri {{ .health.path }}
-{{ end }}
+  default_backend fallback
 
-####
+#####
 # END live-check
-####
+#####
+{{- end -}}
 
+{{- $cert_file := .cert_file }}
 {{- range $frontend := .frontends }}
-frontend {{ $frontend.name }}
 
-  ############################
+frontend {{ .frontend.name }}
+
+{{- if or (eq .frontend.protocol "http") (eq .frontend.protocol "https") }}
+
+  ##################################################################################
   # START http-frontend
-  ############################
+  ##################################################################################
 
-  {{- if eq $frontend.protocol "http" }}
-  bind *:{{ .port }} {{ if $frontend.proxy -}} accept-proxy {{ end }}
-  {{- else if eq $frontend.protocol "https" }}
-  bind *:{{ .port }} ssl crt {{ .cert_file }} {{ if $frontend.proxy -}} accept-proxy {{ end }} alpn h2,http/1.1
-  {{- end }}
   mode http
 
-  ####
-  # START frontend-options
-  ####
+  {{- if eq .frontend.protocol "http" }}
+  bind *:{{ .frontend.port }} {{ if .frontend.proxy -}} accept-proxy {{- end }}
+  {{- else if eq .frontend.protocol "https" }}
+  bind *:{{ .frontend.port }} ssl crt {{ $cert_file }} {{ if .frontend.proxy -}} accept-proxy {{- end }} alpn h2,http/1.1
+  {{- end }}
 
+  ########################################################################
+  # START frontend-options
+  ########################################################################
+
+  log stdout local0
   option httplog
-  {{- range $frontend.options }}
+  {{- range .frontend.options }}
   {{ . }}
   {{- end }}
 
@@ -67,12 +87,12 @@ frontend {{ $frontend.name }}
   # END frontend-options
   ####
 
-  ####
+  ########################################################################
   # START proxy-protocol
-  ####
+  ########################################################################
 
-  acl xff_exists hdr_cnt(X-Forwarded-For) gt 0
   acl is_proxy_https ssl_fc
+  acl xff_exists hdr_cnt(X-Forwarded-For) gt 0
   http-request add-header X-Forwarded-For %[src] unless xff_exists
   http-request set-header X-Forwarded-Port %[dst_port]
   http-request add-header X-Forwarded-Proto https if is_proxy_https
@@ -82,22 +102,22 @@ frontend {{ $frontend.name }}
   # END proxy-protocol
   ####
 
-  ####################
+  ########################################################################
   # START backend-acls
-  ####################
+  ########################################################################
 
   {{ range $root := .domains -}}
 
-  ############
+  ############################################################
   # START domain-acls
-  ############
+  ############################################################
 
-  {{ $domain := $root.domain }}
-  {{ $did := printf "%s_%s" $frontend.name $domain.id -}}
+  {{- $domain := $root.domain }}
+  {{- $did := printf "%s_%s" $frontend.frontend.name $domain.id }}
 
-  ####
+  ############################################
   # START domain-https
-  ####
+  ############################################
 
   {{ if $domain.scheme -}}
   acl acl_{{ $did }}_https {{ if eq $domain.scheme "https" -}} always_true {{ else -}} always_false {{- end }}
@@ -110,25 +130,25 @@ frontend {{ $frontend.name }}
   # END domain-https
   ####
 
-  ####
+  ############################################
   # START host-acls
-  ####
+  ############################################
 
   {{ if $domain.host -}}
   {{ if eq (index $domain.host 0) '*' -}} acl acl_{{ $did }}_domain hdr_end(host) -i {{ $domain.host }}
   {{ else -}} acl acl_{{ $did }}_domain hdr(host) -i {{ $domain.host }} {{- end }}
-  {{ else }} acl acl_{{ $did }}_domain always_false {{- end }}
+  {{ else -}} acl acl_{{ $did }}_domain always_false {{- end }}
 
   ####
   # END host-acls
   ####
 
-  ####
+  ############################################
   # START path-acls
-  ####
+  ############################################
 
   {{ if $domain.prefix -}} acl acl_{{ $did }}_path path_beg -i {{ $domain.prefix }}
-  {{ else }} acl acl_{{ $did }}_path always_true {{- end }}
+  {{ else -}} acl acl_{{ $did }}_path always_true {{- end }}
 
   ####
   # END path-acls
@@ -136,15 +156,16 @@ frontend {{ $frontend.name }}
 
   {{- end }}
 
-  ############
+  ####
   # END domain-acls
-  ############
+  ####
 
-  {{- end }}
-  {{- end }}
+  ####
+  # END backend-acls
+  ####
 
-  ######
-  # Start Backend Mapping
+  ########################################################################
+  # START backend-mapping
   # Note:
   # This assumes domains are sorted by descending path length.
   # If this is not the case, it's possible that services using
@@ -153,30 +174,28 @@ frontend {{ $frontend.name }}
   #   http://example.com/service1/patched -> patched_service1
   # are declared in this order, all requests intended for the
   # patched service will get routed to service1 instead.
-  ######
+  ########################################################################
 
-  {{ range .domains }}
-  {{ $did := printf "%s_%s" $frontend.name .domain.id }}
+  {{- range .domains }}
+  {{- $did := printf "%s_%s" $frontend.frontend.name .domain.id }}
   use_backend {{ $did }} if acl_{{ $did }}_domain acl_{{ $did }}_path
   {{- end }}
 
-  ####################
-  # END backend-acls
-  ####################
-
   default_backend fallback
 
-  {{- end }}
+  ####
+  # END backend-mapping
+  ####
 
-  ############################
+  ####
   # END http-frontend
-  ############################
+  ####
+{{- else if eq $frontend.frontend.protocol "tcp" }}
 
   ########
   # START tcp-frontend
   ########
 
-  {{ if eq $frontend.protocol "tcp" -}}
   bind *:{{ .port }}
   mode tcp
 
@@ -185,7 +204,7 @@ frontend {{ $frontend.name }}
   ####
 
   option tcplog
-  {{- range $frontend.options }}
+  {{- range $frontend.frontend.options }}
   {{ . }}
   {{- end }}
 
@@ -193,30 +212,34 @@ frontend {{ $frontend.name }}
   # END frontend-options
   ####
 
-  {{ range $backend := .backends -}}
-  {{ if eq $backend.frontend $name -}}
-  default_backend {{ $backend.id }}
-  {{ end }}
-  {{ end }}
+  # See this link for possibility of routing tcp based on domain
+  # https://www.spigotmc.org/threads/obscure-corner-for-obscure-conf-file.345414/
 
+  {{- range $root := .domains -}}
+  default_backend {{ .domain.id }}
   {{- end }}
 
   ########
   # END tcp-frontend
   ########
+{{- end -}}
+{{- end -}}
 
-{{ end }}
+{{- range $frontend := .frontends }}
+{{- range $domain := .domains }}
+{{- $did := printf "%s_%s" $frontend.frontend.name .domain.id }}
 
-{{ range $frontend := .frontends -}}
-{{ range $domain := .domains }}
-{{ $did := printf "%s_%s" $frontend.name .domain.id }}
 backend {{ $did }}
-  {{ if .domain.user -}}
+  {{- if or (eq $frontend.frontend.protocol "http") (eq $frontend.frontend.protocol "https") }}
+  mode http
+  {{- end }}
+
+  {{- if .domain.user }}
   acl acl_{{ $did }}_auth http_auth({{ $did }})
   http-request auth realm haproxy unless acl_{{ $did }}_auth
   {{- end }}
 
-  {{ if .domain.prefix -}}
+  {{- if .domain.prefix }}
   http-request set-header X-Path-Prefix {{ .domain.prefix }}
   http-request set-header X-Forwarded-Prefix {{ .domain.prefix }}
   reqirep ^([^\ ]*)\ {{ .domain.prefix }}/?(.*) \1\ /\2
@@ -227,8 +250,8 @@ backend {{ $did }}
   server {{ $container.ip }} {{ $container.ip }}:{{ $port }} {{ if or (ne $container.health "healthy") (ne $container.state "running") }} disabled {{ end }}
   {{- end }}
 
-{{ end }}
-{{ end }}
+{{- end }}
+{{- end }}
 
 backend fallback
   mode http

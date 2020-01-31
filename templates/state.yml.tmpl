@@ -15,17 +15,26 @@
 {{- if ne "" $url.Password }}
   password: {{ $url.Password }}
 {{- end }}
-{{- end }}
+{{- end -}}
 
-{{- $my_uuid := .Self.Container.Parent.UUID }}
-{{- with service | .Parent }}
-  {{- $primary := eq (index .Containers 0 | .UUID) $my_uuid }}
+{{- $uuids := dict "me" "me" "leader" "none" "parent" "unavailable" }}
+{{- with self }}{{- with .Container }}
+{{- $uuids := set $uuids "me" .UUID }}
+{{- with .Parent }}
+{{- $uuids := set $uuids "parent" .UUID }}
+{{- end }}{{- end }}
+{{- with .Service }}{{- with (first .Containers) }}
+{{- $uuids := set $uuids "leader" .UUID }}
+{{- end }}{{- end }}{{- end }}
+
+uuid: {{ get $uuids "me" }}
+leader: {{ get $uuids "leader" }}
+parent: {{ get $uuids "parent" }}
+{{- with (service).Parent }}
   {{- $default_domains := .Metadata.domains }}
   {{- $frontends := .Metadata.frontends }}
-uuid: {{ $my_uuid }}
-leader: {{ if $primary }}true{{- else }}false{{- end }}
 {{ .Metadata | yaml }}
-entries:
+  {{- $entries := dict "count" 0 }}
   {{- $my_stack := .Stack.Name }}
   {{- $my_service := .Name }}
   {{- range $i, $service := services }}
@@ -35,6 +44,10 @@ entries:
   {{- if hasKey $stack_labels $my_service }}
   {{- $service_labels := get $stack_labels $my_service }}
   {{- $ports := keys $service_labels }}
+  {{- $entries := set $entries "count" (add (get $entries "count") 1) }}
+  {{- if le (get $entries "count") 1 }}
+entries:
+  {{- end }}
   - stack: {{ .Stack.Name }}
     service: {{ .Name }}
     {{- if gt (len $service.Containers) 0 }}
@@ -54,12 +67,12 @@ entries:
               {{- $frontend := splitList "/" (get $port_config "frontend") }}
               {{- if eq (len $frontend) 2 }}
             frontend:
-              name: {{ get $port_config "frontend" }}
+              name: {{ regexReplaceAll "[^A-Za-z0-9]" (get $port_config "frontend") "_" }}
               port: {{ index $frontend 0 }}
               protocol: {{ index $frontend 1 }}
               {{- with $frontends }}
               {{- if hasKey . (get $port_config "frontend") }}
-              {{ get . (get $port_config "frontend") | yaml | indent 14 }}
+              {{- get . (get $port_config "frontend") | yaml | nindent 14 }}
               {{- end }}
               {{- end }}
               {{- end }}
@@ -86,4 +99,4 @@ entries:
   {{- end }}
   {{- end }}
   {{- end }}
-{{- end }}
+{{- end -}}

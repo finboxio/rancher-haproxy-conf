@@ -1,5 +1,5 @@
 #!/bin/sh
 
-UUID=$(yq r -j /etc/rancher-conf/haproxy/state.yml uuid)
+UUID=$(yq r -j /etc/rancher-conf/haproxy/state.yml parent | jq -r .)
 docker ps -q -f "label=io.rancher.container.uuid=${UUID}" \
   | xargs docker kill -s USR2

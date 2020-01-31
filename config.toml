@@ -1,0 +1,10 @@
+metadata-version = "2015-12-19"
+log-level = "debug"
+interval = "5s"
+onetime = false
+
+[[ template ]]
+source = "/etc/rancher-conf/templates/state.yml.tmpl"
+dest = "/etc/rancher-conf/haproxy/state.yml"
+notify-cmd = "/etc/rancher-conf/scripts/generate-config"
+# poll-cmd = "/etc/rancher-conf/scripts/renew-certs"

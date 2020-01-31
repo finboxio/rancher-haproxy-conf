@@ -1,0 +1,74 @@
+#!/bin/sh
+
+if [[ "$S3_BUCKET" != "" ]]; then
+  SOURCE_PATH="${S3_BUCKET}/${S3_PREFIX}"
+  CERT_DIR=${S3_MOUNT_DIR:-/s3/$SOURCE_PATH}
+else
+  CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy}
+fi
+
+CERT_NAME=${CERT_NAME:-haproxy.rancher.cert}
+LETSENCRYPT_ENV=${LETSENCRYPT_ENV:-staging}
+
+LEADER=$(yq r -j /etc/rancher-conf/haproxy/state.yml leader)
+
+touch /etc/rancher-conf/haproxy/next-sync
+NEXT_SYNC=$(cat /etc/rancher-conf/haproxy/next-sync)
+now=$(date +%s)
+next=$(date -d $NEXT_SYNC +%s)
+if [ $next -ge $now ]; then
+  echo 'waiting for next sync'
+  exit 0
+else
+  date --date='2 minutes' > /etc/rancher-conf/haproxy/next-sync
+fi
+
+if [[ "$LEADER" == "true" ]]; then
+  # Update/renew certificate if necessary
+
+  DOMAINS=$(cat /etc/rancher-conf/haproxy/state.yml \
+    | yq r -j - \
+    | jq -r '.entries[] | .containers[] | .ingress[] | .domains[] | .host' \
+    | sed 's/[^.]*/*/' \
+    | sort \
+    | uniq \
+    | xargs -I{} echo -n "-d {} ")
+
+  CMD="certbot certonly \
+    --config-dir ${CERT_DIR} \
+    --cert-name ${CERT_NAME} \
+    --dns-route53 \
+    --keep-until-expiring \
+    --expand \
+    --renew-with-new-domains \
+    --allow-subset-of-names \
+    --deploy-hook /etc/rancher-conf/scripts/reload-haproxy"
+
+  if [[ -z "${LETSENCRYPT_EMAIL}" ]]; then
+    CMD="$CMD --noninteractive --agree-tos --email ${LETSENCRYPT_EMAIL}"
+  fi
+
+  if [[ "$LETSENCRYPT_ENV" != "production" ]]; then
+    CMD="$CMD --staging"
+  fi
+
+  $CMD $DOMAINS
+
+  if [[ "$S3_BUCKET" != "" ]]; then
+    s3-push
+  fi
+else
+  # Pull the latest certificate
+  current=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
+
+  if [[ "$S3_BUCKET" != "" ]]; then
+    s3-pull
+  fi
+
+  updated=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
+
+  if [ $updated -ge $current ]; then
+    /etc/rancher-conf/scripts/reload-haproxy
+  fi
+fi
+

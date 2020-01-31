@@ -1,0 +1,14 @@
+version: '3'
+services:
+  conf:
+    build: .
+    entrypoint:
+      - rancher-conf
+      - --metadata-url
+      - https://metadata.staging.finbox.io
+      - --config
+      - /etc/rancher-conf/config.toml
+    volumes:
+      - ./conf:/etc/rancher-conf/haproxy
+      - ./templates:/etc/rancher-conf/templates
+      - ./scripts:/etc/rancher-conf/scripts

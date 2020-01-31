@@ -1,0 +1,53 @@
+#!/bin/sh
+
+CERT_NAME=${CERT_NAME:-haproxy.rancher.cert}
+
+cat /etc/rancher-conf/haproxy/state.yml \
+  | yq r -j - \
+  | jq '.entries[]
+    | (.containers[].ingress[].domains[] |= { domain: . })
+    | .containers[] |= (.ingress[].domains[].container = { health, state, ip })
+    | .containers[]
+    | .ingress[] |= (.domains[].frontend = .frontend)
+    | .ingress[] |= (.domains[].container.port = .port)
+    | .ingress[]
+    | .domains[]' \
+  | jq -s 'group_by(.frontend.name)[]
+    | {
+        frontend: .[0].frontend,
+        domains: [(group_by(.domain.id)[] | sort_by((.domain.path // "") | length) | reverse | {
+          domain: .[0].domain,
+          containers: [ .[] | .container ]
+        })]
+      }' \
+  | jq -s '.' \
+  | yq r - \
+  | yq p frontends \
+  > /etc/rancher-conf/haproxy/haproxy.yml
+
+yq r /etc/rancher-conf/haproxy/state.yml defaults \
+  | yq p defaults \
+  | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
+
+yq r /etc/rancher-conf/haproxy/state.yml global \
+  | yq p global \
+  | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
+
+yq r /etc/rancher-conf/haproxy/state.yml health \
+  | yq p health \
+  | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
+
+yq r /etc/rancher-conf/haproxy/state.yml stats \
+  | yq p stats \
+  | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
+
+if [[ "$S3_BUCKET" != "" ]]; then
+  SOURCE_PATH="${S3_BUCKET}/${S3_PREFIX}"
+  CERT_DIR=${S3_MOUNT_DIR:-/s3/$SOURCE_PATH}
+else
+  CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy}
+fi
+
+yq w -i /etc/rancher-conf/haproxy/haproxy.yml cert_file $CERT_DIR/live/$CERT_NAME/fullchain.pem
+
+gotpl /etc/rancher-conf/templates/haproxy.cfg.tmpl /etc/rancher-conf/haproxy/haproxy.yml > /etc/rancher-conf/haproxy/haproxy.cfg

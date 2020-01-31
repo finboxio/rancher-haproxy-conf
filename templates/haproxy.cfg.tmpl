@@ -1,0 +1,235 @@
+global
+  stats socket /var/run/haproxy.sock mode 777 expose-fd listeners level user
+  log stdout format raw local0 info
+  {{- range .global }}
+  {{ . }}
+  {{- end }}
+
+defaults
+  timeout connect 5000
+  timeout client  50000
+  timeout server  50000
+  errorfile 500 /etc/rancher-conf/haproxy/500.http
+  errorfile 502 /etc/rancher-conf/haproxy/502.http
+  errorfile 503 /etc/rancher-conf/haproxy/503.http
+  errorfile 504 /etc/rancher-conf/haproxy/504.http
+  {{- range .defaults }}
+  {{ . }}
+  {{- end }}
+
+{{ if .stats }}
+listen stats
+  bind 0.0.0.0:{{ if .stats.port }}{{ .stats.port }}{{ else }}9090{{ end }}
+  mode http
+  stats uri {{ if .stats.path }}{{ .stats.path }}{{ else }}/{{ end }}
+  stats admin if {{ if .stats.admin -}} TRUE {{ else -}} FALSE {{ end }}
+{{ end }}
+
+####
+# START live-check
+####
+
+{{ if .health }}
+frontend live_check
+  bind *:{{ .health.port }}
+  mode http
+  monitor-uri {{ .health.path }}
+{{ end }}
+
+####
+# END live-check
+####
+
+{{- range $frontend := .frontends }}
+frontend {{ $frontend.name }}
+
+  ############################
+  # START http-frontend
+  ############################
+
+  {{- if eq $frontend.protocol "http" }}
+  bind *:{{ .port }} {{ if $frontend.proxy -}} accept-proxy {{ end }}
+  {{- else if eq $frontend.protocol "https" }}
+  bind *:{{ .port }} ssl crt {{ .cert_file }} {{ if $frontend.proxy -}} accept-proxy {{ end }} alpn h2,http/1.1
+  {{- end }}
+  mode http
+
+  ####
+  # START frontend-options
+  ####
+
+  option httplog
+  {{- range $frontend.options }}
+  {{ . }}
+  {{- end }}
+
+  ####
+  # END frontend-options
+  ####
+
+  ####
+  # START proxy-protocol
+  ####
+
+  acl xff_exists hdr_cnt(X-Forwarded-For) gt 0
+  acl is_proxy_https ssl_fc
+  http-request add-header X-Forwarded-For %[src] unless xff_exists
+  http-request set-header X-Forwarded-Port %[dst_port]
+  http-request add-header X-Forwarded-Proto https if is_proxy_https
+  http-request add-header X-Forwarded-Proto http unless is_proxy_https
+
+  ####
+  # END proxy-protocol
+  ####
+
+  ####################
+  # START backend-acls
+  ####################
+
+  {{ range $root := .domains -}}
+
+  ############
+  # START domain-acls
+  ############
+
+  {{ $domain := $root.domain }}
+  {{ $did := printf "%s_%s" $frontend.name $domain.id -}}
+
+  ####
+  # START domain-https
+  ####
+
+  {{ if $domain.scheme -}}
+  acl acl_{{ $did }}_https {{ if eq $domain.scheme "https" -}} always_true {{ else -}} always_false {{- end }}
+  acl acl_{{ $did }}_https_host {{ if $domain.host }} hdr(host) -i {{ $domain.host }} {{ else }} always_true {{ end }}
+  acl acl_{{ $did }}_https_path {{ if $domain.prefix }} path_beg -i {{ $domain.prefix }} {{ else }} always_true {{ end }}
+  redirect scheme https code 301 if !is_proxy_https acl_{{ $did }}_https_host acl_{{ $did }}_https_path acl_{{ $did }}_https
+  {{- end }}
+
+  ####
+  # END domain-https
+  ####
+
+  ####
+  # START host-acls
+  ####
+
+  {{ if $domain.host -}}
+  {{ if eq (index $domain.host 0) '*' -}} acl acl_{{ $did }}_domain hdr_end(host) -i {{ $domain.host }}
+  {{ else -}} acl acl_{{ $did }}_domain hdr(host) -i {{ $domain.host }} {{- end }}
+  {{ else }} acl acl_{{ $did }}_domain always_false {{- end }}
+
+  ####
+  # END host-acls
+  ####
+
+  ####
+  # START path-acls
+  ####
+
+  {{ if $domain.prefix -}} acl acl_{{ $did }}_path path_beg -i {{ $domain.prefix }}
+  {{ else }} acl acl_{{ $did }}_path always_true {{- end }}
+
+  ####
+  # END path-acls
+  ####
+
+  {{- end }}
+
+  ############
+  # END domain-acls
+  ############
+
+  {{- end }}
+  {{- end }}
+
+  ######
+  # Start Backend Mapping
+  # Note:
+  # This assumes domains are sorted by descending path length.
+  # If this is not the case, it's possible that services using
+  # path-based routing will be inaccessible. For example, if
+  #   http://example.com/service1 -> service1, and
+  #   http://example.com/service1/patched -> patched_service1
+  # are declared in this order, all requests intended for the
+  # patched service will get routed to service1 instead.
+  ######
+
+  {{ range .domains }}
+  {{ $did := printf "%s_%s" $frontend.name .domain.id }}
+  use_backend {{ $did }} if acl_{{ $did }}_domain acl_{{ $did }}_path
+  {{- end }}
+
+  ####################
+  # END backend-acls
+  ####################
+
+  default_backend fallback
+
+  {{- end }}
+
+  ############################
+  # END http-frontend
+  ############################
+
+  ########
+  # START tcp-frontend
+  ########
+
+  {{ if eq $frontend.protocol "tcp" -}}
+  bind *:{{ .port }}
+  mode tcp
+
+  ####
+  # START frontend-options
+  ####
+
+  option tcplog
+  {{- range $frontend.options }}
+  {{ . }}
+  {{- end }}
+
+  ####
+  # END frontend-options
+  ####
+
+  {{ range $backend := .backends -}}
+  {{ if eq $backend.frontend $name -}}
+  default_backend {{ $backend.id }}
+  {{ end }}
+  {{ end }}
+
+  {{- end }}
+
+  ########
+  # END tcp-frontend
+  ########
+
+{{ end }}
+
+{{ range $frontend := .frontends -}}
+{{ range $domain := .domains }}
+{{ $did := printf "%s_%s" $frontend.name .domain.id }}
+backend {{ $did }}
+  {{ if .domain.user -}}
+  acl acl_{{ $did }}_auth http_auth({{ $did }})
+  http-request auth realm haproxy unless acl_{{ $did }}_auth
+  {{- end }}
+
+  {{ if .domain.prefix -}}
+  http-request set-header X-Path-Prefix {{ .domain.prefix }}
+  http-request set-header X-Forwarded-Prefix {{ .domain.prefix }}
+  reqirep ^([^\ ]*)\ {{ .domain.prefix }}/?(.*) \1\ /\2
+  {{- end }}
+
+  {{- range $container := .containers }}
+  {{- $port := .port }}
+  server {{ $container.ip }} {{ $container.ip }}:{{ $port }} {{ if or (ne $container.health "healthy") (ne $container.state "running") }} disabled {{ end }}
+  {{- end }}
+
+{{ end }}
+{{ end }}
+
+backend fallback
+  mode http
+  errorfile 503 /etc/rancher-conf/haproxy/404.http

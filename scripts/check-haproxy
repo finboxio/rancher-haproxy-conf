@@ -1,0 +1,5 @@
+#!/bin/sh
+
+UUID=$(yq r -j /etc/rancher-conf/haproxy/state.yml uuid)
+docker ps -q -f "label=io.rancher.container.uuid=${UUID}" \
+  | xargs -I{} docker exec {} haproxy -f /etc/rancher-conf/haproxy/haproxy.cfg -c

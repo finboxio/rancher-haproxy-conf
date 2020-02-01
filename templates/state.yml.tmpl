@@ -56,8 +56,8 @@ entries:
       {{- if $container.PrimaryIp }}
       - index: {{ $container.CreateIndex }}
         ip: {{ $container.PrimaryIp }}
-        state: {{ $container.State }}
-        health: {{ $container.HealthState }}
+        state: {{ default "unknown" $container.State }}
+        health: {{ default "unknown" $container.HealthState }}
         ingress:
           {{- range $port := $ports }}
           - port: {{ $port }}

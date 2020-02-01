@@ -1,22 +1,16 @@
 #!/bin/sh
 
-if [[ "$S3_BUCKET" != "" ]]; then
-  SOURCE_PATH="${S3_BUCKET}/${S3_PREFIX}"
-  CERT_DIR=${S3_MOUNT_DIR:-/s3/$SOURCE_PATH}
-else
-  CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy}
-fi
-
+CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy/certs}
 CERT_NAME=${CERT_NAME:-haproxy.rancher.cert}
 LETSENCRYPT_ENV=${LETSENCRYPT_ENV:-staging}
 
 UUID=$(yq r -j /etc/rancher-conf/haproxy/state.yml uuid | jq -r .)
 LEADER=$(yq r -j /etc/rancher-conf/haproxy/state.yml leader | jq -r .)
 
-touch /etc/rancher-conf/haproxy/next-sync
+touch /etc/rancher-conf/haproxy/next-sync.timestamp
 
 now=$(date '+%s')
-next=$(cat /etc/rancher-conf/haproxy/next-sync)
+next=$(cat /etc/rancher-conf/haproxy/next-sync.timestamp)
 if [[ "$next" == "" ]]; then
   next='0'
 fi
@@ -27,8 +21,10 @@ if [ $next -ge $now ]; then
   echo 'waiting for next sync'
   exit 0
 else
-  date --date='2 minutes' '+%s' > /etc/rancher-conf/haproxy/next-sync
+  date --date='2 minutes' '+%s' > /etc/rancher-conf/haproxy/next-sync.timestamp
 fi
+
+mkdir -p $CERT_DIR
 
 if [[ "$LEADER" == "$UUID" ]]; then
   # Update/renew certificate if necessary
@@ -58,33 +54,22 @@ if [[ "$LEADER" == "$UUID" ]]; then
     CMD="$CMD --staging"
   fi
 
-  echo "$CMD $DOMAINS"
   $CMD $DOMAINS
 
   cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > ${CERT_DIR}/live/${CERT_NAME}/combined.pem
-
-  if [[ "$S3_BUCKET" != "" ]]; then
-    s3-push --delete
-  fi
 else
-  # Pull the latest certificate
-  if [[ -e ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ]]; then
-    current=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
+  version=$(cat /etc/rancher-conf/haproxy/last-reload.timestamp)
+  if [[ "$version" == "" ]]; then
+    version='0'
+  fi
+
+  if [[ -e ${CERT_DIR}/live/${CERT_NAME}/combined.pem ]]; then
+    current=$(date -r ${CERT_DIR}/live/${CERT_NAME}/combined.pem '+%s')
   else
-    current="0"
+    current='0'
   fi
 
-  if [[ "$S3_BUCKET" != "" ]]; then
-    s3-pull --delete
-  fi
-
-  if [[ -e ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ]]; then
-    updated=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
-  else
-    updated="0"
-  fi
-
-  if [ $updated -ge $current ]; then
+  if [ $current -gt $version ]; then
     /etc/rancher-conf/scripts/reload-haproxy
   fi
 fi

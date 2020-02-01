@@ -47,7 +47,6 @@ frontend live_check
   bind *:{{ .health.port }}
   mode http
   monitor-uri {{ .health.path }}
-  default_backend fallback
 
 #####
 # END live-check
@@ -71,6 +70,7 @@ frontend {{ .frontend.name }}
   bind *:{{ .frontend.port }} {{ if .frontend.proxy -}} accept-proxy {{- end }}
   {{- else if eq .frontend.protocol "https" }}
   bind *:{{ .frontend.port }} ssl crt {{ $cert_file }} {{ if .frontend.proxy -}} accept-proxy {{- end }} alpn h2,http/1.1
+  bind *:{{ .frontend.port }}0 {{ if .frontend.proxy -}} accept-proxy {{- end }}
   {{- end }}
 
   ########################################################################
@@ -97,6 +97,10 @@ frontend {{ .frontend.name }}
   http-request set-header X-Forwarded-Port %[dst_port]
   http-request add-header X-Forwarded-Proto https if is_proxy_https
   http-request add-header X-Forwarded-Proto http unless is_proxy_https
+
+  {{- if eq .frontend.protocol "https" }}
+  redirect scheme https code 301 if !is_proxy_https
+  {{- end }}
 
   ####
   # END proxy-protocol

@@ -1,6 +1,7 @@
 #!/bin/sh
 
 CERT_NAME=${CERT_NAME:-haproxy.rancher.cert}
+CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy}
 
 cat /etc/rancher-conf/haproxy/state.yml \
   | yq r -j - \
@@ -40,13 +41,6 @@ yq r /etc/rancher-conf/haproxy/state.yml health \
 yq r /etc/rancher-conf/haproxy/state.yml stats \
   | yq p - stats \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
-
-if [[ "$S3_BUCKET" != "" ]]; then
-  SOURCE_PATH="${S3_BUCKET}/${S3_PREFIX}"
-  CERT_DIR=${S3_MOUNT_DIR:-/s3/$SOURCE_PATH}
-else
-  CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy}
-fi
 
 yq w -i /etc/rancher-conf/haproxy/haproxy.yml cert_file $CERT_DIR/live/$CERT_NAME/combined.pem
 

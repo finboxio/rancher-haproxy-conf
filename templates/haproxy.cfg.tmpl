@@ -246,7 +246,7 @@ backend {{ $did }}
   {{- if .domain.prefix }}
   http-request set-header X-Path-Prefix {{ .domain.prefix }}
   http-request set-header X-Forwarded-Prefix {{ .domain.prefix }}
-  reqirep ^([^\ ]*)\ {{ .domain.prefix }}/?(.*) \1\ /\2
+  http-request replace-uri {{ .domain.prefix }}/?(.*) /\1
   {{- end }}
 
   {{- range $container := .containers }}

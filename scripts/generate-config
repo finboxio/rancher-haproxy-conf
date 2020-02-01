@@ -16,10 +16,10 @@ cat /etc/rancher-conf/haproxy/state.yml \
   | jq -s 'group_by(.frontend.name)[]
     | {
         frontend: .[0].frontend,
-        domains: [(group_by(.domain.id)[] | sort_by((.domain.path // "") | length) | reverse | {
+        domains: [(group_by(.domain.id)[] | {
           domain: .[0].domain,
           containers: [ .[] | .container ]
-        })]
+        })] | sort_by((.domain.prefix // "") | length) | reverse
       }' \
   | jq -s '.' \
   | yq r - \

@@ -57,6 +57,7 @@ if [[ "$LEADER" == "$UUID" ]]; then
   $CMD $DOMAINS
 
   cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/cert.pem
+  /etc/rancher-conf/scripts/reload-haproxy
 else
   version=$(cat /etc/rancher-conf/haproxy/last-reload.timestamp)
   if [[ "$version" == "" ]]; then

@@ -42,7 +42,7 @@ yq r /etc/rancher-conf/haproxy/state.yml stats \
   | yq p - stats \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
 
-yq w -i /etc/rancher-conf/haproxy/haproxy.yml cert_file $CERT_DIR/live/$CERT_NAME/combined.pem
+yq w -i /etc/rancher-conf/haproxy/haproxy.yml cert_file /etc/rancher-conf/haproxy/cert.pem
 
 gotpl /etc/rancher-conf/templates/haproxy.cfg.tmpl \
   < /etc/rancher-conf/haproxy/haproxy.yml \

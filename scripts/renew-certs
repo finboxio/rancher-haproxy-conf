@@ -56,20 +56,22 @@ if [[ "$LEADER" == "$UUID" ]]; then
 
   $CMD $DOMAINS
 
-  cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > ${CERT_DIR}/live/${CERT_NAME}/combined.pem
+  cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/cert.pem
 else
   version=$(cat /etc/rancher-conf/haproxy/last-reload.timestamp)
   if [[ "$version" == "" ]]; then
     version='0'
   fi
 
-  if [[ -e ${CERT_DIR}/live/${CERT_NAME}/combined.pem ]]; then
-    current=$(date -r ${CERT_DIR}/live/${CERT_NAME}/combined.pem '+%s')
+  if [[ -e /etc/rancher-conf/haproxy/cert.pem ]]; then
+    current=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
   else
     current='0'
   fi
 
-  if [ $current -gt $version ]; then
+  if [ $current -ge $version ]; then
+    cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/cert.pem
+    date '+%s' > /etc/rancher-conf/haproxy/last-reload.timestamp
     /etc/rancher-conf/scripts/reload-haproxy
   fi
 fi

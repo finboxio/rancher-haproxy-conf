@@ -6,19 +6,19 @@ CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy}
 cat /etc/rancher-conf/haproxy/state.yml \
   | yq r -j - \
   | jq '.entries[]
-    | (.containers[].ingress[].domains[] |= { domain: . })
-    | .containers[] |= (.ingress[].domains[].container = { health, state, ip })
-    | .containers[]
-    | .ingress[] |= (.domains[].frontend = .frontend)
-    | .ingress[] |= (.domains[].container.port = .port)
-    | .ingress[]
-    | .domains[]' \
+    | (.containers[]?.ingress[]?.domains[]? |= { domain: . })
+    | .containers[]? |= (.ingress[]?.domains[]?.container = { health, state, ip })
+    | .containers[]?
+    | .ingress[]? |= (.domains[]?.frontend = .frontend)
+    | .ingress[]? |= (.domains[]?.container.port = .port)
+    | .ingress[]?
+    | .domains[]?' \
   | jq -s 'group_by(.frontend.name)[]
     | {
         frontend: .[0].frontend,
-        domains: [(group_by(.domain.id)[] | {
+        domains: [(group_by(.domain.id)[]? | {
           domain: .[0].domain,
-          containers: [ .[] | .container ]
+          containers: [ .[]? | .container ]
         })] | sort_by((.domain.prefix // "") | length) | reverse
       }' \
   | jq -s '.' \

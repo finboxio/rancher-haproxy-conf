@@ -31,8 +31,17 @@ if [[ "$LEADER" == "$UUID" ]]; then
 
   DOMAINS=$(cat /etc/rancher-conf/haproxy/state.yml \
     | yq r -j - \
-    | jq -r '.entries[] | .containers[] | .ingress[] | .domains[] | .host' \
+    | jq -r '.entries // [] | .[] | .containers // [] | .[] | .ingress // [] | .[] | .domains // [] | .[] | .host' \
+    | grep -r '\..*\.' \
     | sed 's/[^.]*/*/' \
+    | sort \
+    | uniq \
+    | xargs -I{} echo -n "-d {} ")
+
+  ROOTS=$(cat /etc/rancher-conf/haproxy/state.yml \
+    | yq r -j - \
+    | jq -r '.entries // [] | .[] | .containers // [] | .[] | .ingress // [] | .[] | .domains // [] | .[] | .host' \
+    | grep -r '^[^.]*\.[^.]*$' \
     | sort \
     | uniq \
     | xargs -I{} echo -n "-d {} ")
@@ -54,7 +63,7 @@ if [[ "$LEADER" == "$UUID" ]]; then
     CMD="$CMD --staging"
   fi
 
-  $CMD $DOMAINS
+  $CMD $ROOTS $DOMAINS
 
   cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/cert.pem
   /etc/rancher-conf/scripts/reload-haproxy

@@ -1,14 +1,12 @@
-FROM alpine:latest
+FROM certbot/dns-route53:latest
 
 VOLUME /opt/rancher/bin
 VOLUME /etc/rancher-conf/haproxy
 
 ENV GO111MODULE=on
 ENV PATH=$PATH:/root/go/bin
-RUN apk add --no-cache go git \
-      certbot python3 py3-pip \
-      coreutils docker-cli && \
-    pip3 install certbot-dns-route53 && \
+RUN apk add --no-cache go git openssl curl \
+    coreutils docker-cli && \
     go get github.com/finboxio/rancher-conf/cmd/rancher-conf@v0.4.0 && \
     go get github.com/tsg/gotpl && \
     wget -O /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/2.4.1/yq_linux_amd64" && \
@@ -16,7 +14,7 @@ RUN apk add --no-cache go git \
     wget -O /usr/local/bin/jq "https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64" && \
     chmod +x /usr/local/bin/jq && \
     rm -rf /root/go/src && \
-    apk del go git py3-pip
+    apk del go git
 
 ADD config.toml /etc/rancher-conf/
 ADD templates /etc/rancher-conf/templates

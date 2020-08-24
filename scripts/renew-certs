@@ -38,7 +38,7 @@ if [[ "$LEADER" == "$UUID" ]]; then
       threshold=$(date -d "$SLACK_ALERT_WINDOW" "+%s")
       if [ $expire_unix -lt $threshold ]; then
         curl -X POST \
-          -d "{ \"text\": \"${CERT_DIR}/live/${CERT_NAME} will expire within ${SLACK_ALERT_WINDOW}\" }" \
+          -d "{ \"text\": \"${CERT_DIR}/live/${CERT_NAME} will expire on ${expire_utc}\" }" \
           $SLACK_WEBHOOK_URL
       fi
     fi

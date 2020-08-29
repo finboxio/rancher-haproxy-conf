@@ -13,7 +13,13 @@ touch /etc/rancher-conf/haproxy/next-sync.timestamp
 
 now=$(date '+%s')
 next=$(cat /etc/rancher-conf/haproxy/next-sync.timestamp)
+certlines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+keylines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
 if [[ "$next" == "" ]]; then
+  next='0'
+fi
+
+if [[ $certlines -eq 0 || $keylines -eq 0 ]]; then
   next='0'
 fi
 
@@ -80,7 +86,15 @@ if [[ "$LEADER" == "$UUID" ]]; then
 
   $CMD $ROOTS $DOMAINS
 
-  cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/cert.pem
+  certlines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+  keylines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+  until [[ $certlines -gt 0 && $keylines -gt 0 ]]; do
+    cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/cert.pem
+    certlines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+    keylines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+    sleep 1
+  done
+
   /etc/rancher-conf/scripts/reload-haproxy
 else
   version=$(cat /etc/rancher-conf/haproxy/last-reload.timestamp)
@@ -88,14 +102,22 @@ else
     version='0'
   fi
 
-  if [[ -e /etc/rancher-conf/haproxy/cert.pem ]]; then
+  certlines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+  keylines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+  if [[ $certlines -gt 0 && $keylines -gt 0 ]]; then
     current=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
   else
     current='0'
   fi
 
   if [ $current -ge $version ]; then
-    cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/cert.pem
+    until [[ $certlines -gt 0 && $keylines -gt 0 ]]; do
+      cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/cert.pem
+      certlines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+      keylines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+      sleep 1
+    done
+
     date '+%s' > /etc/rancher-conf/haproxy/last-reload.timestamp
     /etc/rancher-conf/scripts/reload-haproxy
   fi

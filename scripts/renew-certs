@@ -84,7 +84,10 @@ if [[ "$LEADER" == "$UUID" ]]; then
     CMD="$CMD --staging"
   fi
 
-  $CMD $ROOTS $DOMAINS
+  out=$($CMD $ROOTS $DOMAINS)
+  echo $out
+
+  presum=$(md5sum /etc/rancher-conf/haproxy/cert.pem)
 
   certlines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN CERTIFICATE' | wc -l)
   keylines=$(cat /etc/rancher-conf/haproxy/cert.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
@@ -95,7 +98,11 @@ if [[ "$LEADER" == "$UUID" ]]; then
     sleep 1
   done
 
-  /etc/rancher-conf/scripts/reload-haproxy
+  postsum=$(md5sum /etc/rancher-conf/haproxy/cert.pem)
+
+  if [[ "$presum" != "$postsum" ]]; then
+    /etc/rancher-conf/scripts/reload-haproxy
+  fi
 else
   version=$(cat /etc/rancher-conf/haproxy/last-reload.timestamp)
   if [[ "$version" == "" ]]; then

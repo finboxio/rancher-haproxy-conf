@@ -1,5 +1,8 @@
 global
   stats socket /var/run/haproxy.sock mode 777 expose-fd listeners level user
+  {{ if .stats.tcp -}}
+  stats socket ipv4@0.0.0.0:{{ .stats.tcp }}
+  {{- end }}
   log stdout format raw local0 info
   tune.ssl.default-dh-param 2048
   {{- range .global }}

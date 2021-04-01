@@ -71,9 +71,12 @@ frontend {{ .frontend.name }}
 
   {{- if eq .frontend.protocol "http" }}
   bind *:{{ .frontend.port }} {{ if .frontend.proxy -}} accept-proxy {{- end }}
+  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}0 {{- end }}
   {{- else if eq .frontend.protocol "https" }}
   bind *:{{ .frontend.port }} ssl crt {{ $cert_file }} {{ if .frontend.proxy -}} accept-proxy {{- end }} alpn h2,http/1.1
   bind *:{{ .frontend.port }}0 {{ if .frontend.proxy -}} accept-proxy {{- end }}
+  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 ssl crt {{ $cert_file }} alpn h2,http/1.1 {{- end }}
+  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}2 {{- end }}
   {{- end }}
 
   ########################################################################
@@ -96,6 +99,7 @@ frontend {{ .frontend.name }}
 
   acl is_proxy_https ssl_fc
   acl xff_exists hdr_cnt(X-Forwarded-For) gt 0
+  http-request set-header host %[hdr(host),field(1,:)]
   http-request add-header X-Forwarded-For %[src] unless xff_exists
   http-request set-header X-Forwarded-Port %[dst_port]
   http-request add-header X-Forwarded-Proto https if is_proxy_https

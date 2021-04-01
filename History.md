@@ -1,4 +1,10 @@
 
+0.1.0 / 2021-03-31
+==================
+
+  * bind to additional ports without proxy protocol
+  * ignore port in host matching
+
 0.0.14 / 2020-11-02
 ==================
 

@@ -7,7 +7,7 @@ ENV GO111MODULE=on
 ENV PATH=$PATH:/root/go/bin
 RUN apk add --no-cache go git openssl curl \
     coreutils docker-cli && \
-    go get github.com/finboxio/rancher-conf/cmd/rancher-conf@v0.4.0 && \
+    go get github.com/finboxio/rancher-conf/cmd/rancher-conf@v0.7.0 && \
     go get github.com/tsg/gotpl && \
     wget -O /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/2.4.1/yq_linux_amd64" && \
     chmod +x /usr/local/bin/yq && \

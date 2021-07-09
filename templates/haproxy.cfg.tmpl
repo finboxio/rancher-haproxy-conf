@@ -10,7 +10,7 @@ global
   {{- end }}
 
 defaults
-  timeout connect 5000
+  timeout connect 1000
   timeout client  50000
   timeout server  50000
 
@@ -243,6 +243,8 @@ frontend {{ .frontend.name }}
 backend {{ $did }}
   {{- if or (eq $frontend.frontend.protocol "http") (eq $frontend.frontend.protocol "https") }}
   mode http
+  retries 5
+  option redispatch
   {{- end }}
 
   {{- if .domain.user }}
@@ -256,9 +258,11 @@ backend {{ $did }}
   http-request replace-uri {{ .domain.prefix }}/?(.*) /\1
   {{- end }}
 
+  default-server check inter 2000 fastinter 500 downinter 500 rise 2 fall 3
+
   {{- range $container := .containers }}
   {{- $port := .port }}
-  server {{ $container.ip }} {{ $container.ip }}:{{ $port }} {{ if or (ne $container.health "healthy") (ne $container.state "running") }} disabled {{ end }}
+  server {{ $container.ip }} {{ $container.ip }}:{{ $port }} {{ if or (and (ne $container.health "healthy") (ne $container.health "updating-healthy") (ne $container.health "initializing")) (and (ne $container.state "running") (ne $container.state "updating-running")) }} disabled {{ end }}
   {{- end }}
 
 {{- end }}

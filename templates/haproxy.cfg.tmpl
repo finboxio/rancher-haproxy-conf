@@ -70,13 +70,13 @@ frontend {{ .frontend.name }}
   mode http
 
   {{- if eq .frontend.protocol "http" }}
-  bind *:{{ .frontend.port }} {{ if .frontend.proxy -}} accept-proxy {{- end }}
-  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}0 {{- end }}
+  bind *:{{ .frontend.port }}
+  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 accept-proxy {{- end }}
   {{- else if eq .frontend.protocol "https" }}
-  bind *:{{ .frontend.port }} ssl crt {{ $cert_file }} {{ if .frontend.proxy -}} accept-proxy {{- end }} alpn h2,http/1.1
-  bind *:{{ .frontend.port }}0 {{ if .frontend.proxy -}} accept-proxy {{- end }}
-  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 ssl crt {{ $cert_file }} alpn h2,http/1.1 {{- end }}
-  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}2 {{- end }}
+  bind *:{{ .frontend.port }} ssl crt {{ $cert_file }} alpn h2,http/1.1
+  bind *:{{ .frontend.port }}0
+  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 ssl crt {{ $cert_file }} accept-proxy alpn h2,http/1.1 {{- end }}
+  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}2 accept-proxy {{- end }}
   {{- end }}
 
   ########################################################################

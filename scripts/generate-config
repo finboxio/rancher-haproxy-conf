@@ -1,7 +1,6 @@
 #!/bin/sh
 
-CERT_NAME=${CERT_NAME:-haproxy.rancher.cert}
-CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy}
+LETSENCRYPT_ENV=${LETSENCRYPT_ENV:-staging}
 
 cat /etc/rancher-conf/haproxy/state.yml \
   | yq r -j - \
@@ -20,7 +19,8 @@ cat /etc/rancher-conf/haproxy/state.yml \
           domain: .[0].domain,
           containers: [ .[]? | .container ]
         })] | sort_by((.domain.prefix // "") | length) | reverse
-      }' \
+      }
+    | (.frontend.certfile = (if .frontend.certfile == "letsencrypt" then ("/etc/rancher-conf/haproxy/" + .frontend.name + "-" + "'"$LETSENCRYPT_ENV"'" + ".pem") else .frontend.certfile end))' \
   | jq -s '.' \
   | yq r - \
   | yq p - frontends \
@@ -41,8 +41,6 @@ yq r /etc/rancher-conf/haproxy/state.yml health \
 yq r /etc/rancher-conf/haproxy/state.yml stats \
   | yq p - stats \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
-
-yq w -i /etc/rancher-conf/haproxy/haproxy.yml cert_file /etc/rancher-conf/haproxy/cert.pem
 
 gotpl /etc/rancher-conf/templates/haproxy.cfg.tmpl \
   < /etc/rancher-conf/haproxy/haproxy.yml \

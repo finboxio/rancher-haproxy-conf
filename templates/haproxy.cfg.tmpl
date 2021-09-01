@@ -56,7 +56,6 @@ frontend live_check
 #####
 {{- end -}}
 
-{{- $cert_file := .cert_file }}
 {{- range $frontend := .frontends }}
 
 frontend {{ .frontend.name }}
@@ -73,9 +72,9 @@ frontend {{ .frontend.name }}
   bind *:{{ .frontend.port }}
   {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 accept-proxy {{- end }}
   {{- else if eq .frontend.protocol "https" }}
-  bind *:{{ .frontend.port }} ssl crt {{ $cert_file }} alpn h2,http/1.1
+  bind *:{{ .frontend.port }} ssl crt {{ .frontend.certfile }} alpn h2,http/1.1
   bind *:{{ .frontend.port }}0
-  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 ssl crt {{ $cert_file }} accept-proxy alpn h2,http/1.1 {{- end }}
+  {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 ssl crt {{ .frontend.certfile }} accept-proxy alpn h2,http/1.1 {{- end }}
   {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}2 accept-proxy {{- end }}
   {{- end }}
 

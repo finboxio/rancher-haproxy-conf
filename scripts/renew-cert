@@ -1,0 +1,134 @@
+#!/bin/sh
+
+CERT_DIR=${CERT_DIR:-/etc/rancher-conf/haproxy/certs}
+LETSENCRYPT_ENV=${LETSENCRYPT_ENV:-staging}
+SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+SLACK_ALERT_WINDOW=${SLACK_ALERT_WINDOW:-10day}
+
+FRONTEND_NAME=$1
+CERT_NAME=$FRONTEND_NAME-$LETSENCRYPT_ENV
+
+UUID=$(yq r -j /etc/rancher-conf/haproxy/state.yml uuid | jq -r .)
+LEADER=$(yq r -j /etc/rancher-conf/haproxy/state.yml leader | jq -r .)
+
+touch /etc/rancher-conf/haproxy/${CERT_NAME}.next-sync.timestamp
+
+now=$(date '+%s')
+next=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.next-sync.timestamp)
+certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+if [[ "$next" == "" ]]; then
+  next='0'
+fi
+
+if [[ $certlines -eq 0 || $keylines -eq 0 ]]; then
+  next='0'
+fi
+
+echo $now $next
+
+if [ $next -ge $now ]; then
+  echo 'waiting for next sync'
+  exit 0
+else
+  date --date='2 minutes' '+%s' > /etc/rancher-conf/haproxy/${CERT_NAME}.next-sync.timestamp
+fi
+
+mkdir -p $CERT_DIR
+
+if [[ "$LEADER" == "$UUID" ]]; then
+  # Update/renew certificate if necessary
+
+  if [[ -e /etc/rancher-conf/haproxy/${CERT_NAME}.pem ]]; then
+    if [[ "${SLACK_WEBHOOK_URL}" != "" ]]; then
+      expire_utc=$(openssl x509 -in /etc/rancher-conf/haproxy/${CERT_NAME}.pem -text -noout | grep After | awk -F' : ' '{ print $2 }')
+      expire_unix=$(date -d "$expire_utc" "+%s")
+      threshold=$(date -d "$SLACK_ALERT_WINDOW" "+%s")
+      if [ $expire_unix -lt $threshold ]; then
+        curl -X POST \
+          -d "{ \"text\": \"${CERT_DIR}/live/${CERT_NAME} will expire on ${expire_utc}\" }" \
+          $SLACK_WEBHOOK_URL
+      fi
+    fi
+  fi
+
+  DOMAINS=$(cat /etc/rancher-conf/haproxy/state.yml \
+    | yq r -j - \
+    | jq -r '.entries[]? | .containers[]? | .ingress[]? | select(.frontend.name == "'"$FRONTEND_NAME"'") | .domains[]? | .host' \
+    | grep -r '\..*\.' \
+    | sed 's/[^.]*/*/' \
+    | sort \
+    | uniq \
+    | xargs -I{} echo -n "-d {} ")
+
+  ROOTS=$(cat /etc/rancher-conf/haproxy/state.yml \
+    | yq r -j - \
+    | jq -r '.entries[]? | .containers[]? | .ingress[]? | select(.frontend.name == "'"$FRONTEND_NAME"'") | .domains[]? | .host' \
+    | grep -r '^[^.]*\.[^.]*$' \
+    | sort \
+    | uniq \
+    | xargs -I{} echo -n "-d {} ")
+
+  CMD="certbot certonly \
+    --config-dir ${CERT_DIR} \
+    --cert-name ${CERT_NAME} \
+    --dns-route53 \
+    --keep-until-expiring \
+    --expand \
+    --renew-with-new-domains \
+    --deploy-hook /etc/rancher-conf/scripts/reload-haproxy"
+
+  if [[ "${LETSENCRYPT_EMAIL}" != "" ]]; then
+    CMD="$CMD --noninteractive --agree-tos --email ${LETSENCRYPT_EMAIL}"
+  fi
+
+  if [[ "$LETSENCRYPT_ENV" != "production" ]]; then
+    CMD="$CMD --staging"
+  fi
+
+  out=$($CMD $ROOTS $DOMAINS)
+  echo $out
+
+  presum=$(md5sum /etc/rancher-conf/haproxy/${CERT_NAME}.pem)
+
+  certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+  keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+  until [[ $certlines -gt 0 && $keylines -gt 0 ]]; do
+    cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/${CERT_NAME}.pem
+    certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+    keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+    sleep 1
+  done
+
+  postsum=$(md5sum /etc/rancher-conf/haproxy/${CERT_NAME}.pem)
+
+  if [[ "$presum" != "$postsum" ]]; then
+    /etc/rancher-conf/scripts/reload-haproxy
+  fi
+else
+  version=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp)
+  if [[ "$version" == "" ]]; then
+    version='0'
+  fi
+
+  certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+  keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+  if [[ $certlines -gt 0 && $keylines -gt 0 ]]; then
+    current=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
+  else
+    current='0'
+  fi
+
+  if [ $current -ge $version ]; then
+    until [[ $certlines -gt 0 && $keylines -gt 0 ]]; do
+      cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/${CERT_NAME}.pem
+      certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+      keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+      sleep 1
+    done
+
+    date '+%s' > /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp
+    /etc/rancher-conf/scripts/reload-haproxy
+  fi
+fi
+

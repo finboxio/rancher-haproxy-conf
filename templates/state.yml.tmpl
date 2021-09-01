@@ -63,9 +63,10 @@ entries:
           - port: {{ $port }}
             {{- $port_config := get $service_labels $port }}
             {{- if or (gt (len $default_domains) 0) (hasKey $port_config "domain") (hasKey $port_config "domains") }}
+
             {{- if hasKey $port_config "frontend" }}
-              {{- $frontend := splitList "/" (get $port_config "frontend") }}
-              {{- if eq (len $frontend) 2 }}
+            {{- $frontend := splitList "/" (get $port_config "frontend") }}
+            {{- if eq (len $frontend) 2 }}
             frontend:
               name: {{ regexReplaceAll "[^A-Za-z0-9]" (get $port_config "frontend") "_" }}
               port: {{ index $frontend 0 }}
@@ -75,8 +76,17 @@ entries:
               {{- get . (get $port_config "frontend") | yaml | nindent 14 }}
               {{- end }}
               {{- end }}
+            {{- else }}
+            frontend:
+              name: {{ regexReplaceAll "[^A-Za-z0-9]" (get $port_config "frontend") "_" }}
+              {{- with $frontends }}
+              {{- if hasKey . (get $port_config "frontend") }}
+              {{- get . (get $port_config "frontend") | yaml | nindent 14 }}
+              {{- end }}
               {{- end }}
             {{- end }}
+            {{ end -}}
+
             domains:
               {{- range $domain := $default_domains }}
                 {{- include "templated-url" (dict "url" (trim $domain) "index" $i "port" $port "container" $container) | indent 14 }}

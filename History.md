@@ -1,4 +1,9 @@
 
+0.3.0 / 2021-09-01
+===================
+
+  * Support multiple frontends using different certs and letsencrypt opt-out (#2)
+
 0.2.1 / 2021-07-19
 ==================
 

@@ -43,11 +43,12 @@ parent: {{ get $uuids "parent" }}
   {{- $stack_labels := get $config $my_stack }}
   {{- if hasKey $stack_labels $my_service }}
   {{- $service_labels := get $stack_labels $my_service }}
-  {{- $ports := keys $service_labels }}
   {{- $entries := set $entries "count" (add (get $entries "count") 1) }}
   {{- if le (get $entries "count") 1 }}
 entries:
   {{- end }}
+
+  {{- $ports_or_frontends := keys $service_labels }}
   - stack: {{ .Stack.Name }}
     service: {{ .Name }}
     {{- if gt (len $service.Containers) 0 }}
@@ -59,34 +60,21 @@ entries:
         state: {{ default "unknown" $container.State }}
         health: {{ default "unknown" $container.HealthState }}
         ingress:
-          {{- range $port := $ports }}
+          {{- range $port_or_frontend := $ports_or_frontends }}
+          {{- $pf_config := hasKey $frontends $port_or_frontend | ternary (dict "frontend" $port_or_frontend "port_config" (get $service_labels $port_or_frontend)) (dict "frontend" (get (get $service_labels $port_or_frontend) "frontend") "port_config" (dict $port_or_frontend (get $service_labels $port_or_frontend))) }}
+          {{- $frontend := regexReplaceAll "[-/:]" (get $pf_config "frontend") "_" }}
+          {{- range $port, $port_config := (get $pf_config "port_config") }}
           - port: {{ $port }}
-            {{- $port_config := get $service_labels $port }}
             {{- if or (gt (len $default_domains) 0) (hasKey $port_config "domain") (hasKey $port_config "domains") }}
-
-            {{- if hasKey $port_config "frontend" }}
-            {{- $frontend := splitList "/" (get $port_config "frontend") }}
-            {{- if eq (len $frontend) 2 }}
             frontend:
-              name: {{ regexReplaceAll "[^A-Za-z0-9]" (get $port_config "frontend") "_" }}
-              port: {{ index $frontend 0 }}
-              protocol: {{ index $frontend 1 }}
-              {{- with $frontends }}
-              {{- if hasKey . (get $port_config "frontend") }}
-              {{- get . (get $port_config "frontend") | yaml | nindent 14 }}
+              name: {{ regexReplaceAll "[^A-Za-z0-9]" $frontend "_" }}
+              {{- if (hasKey $frontends $frontend) | not }}
+              port: {{ index (splitList "_" $frontend) 0 }}
+              protocol: {{ index (splitList "_" $frontend) 1 }}
               {{- end }}
+              {{- if hasKey $frontends $frontend }}
+              {{- get $frontends $frontend | yaml | nindent 14 }}
               {{- end }}
-            {{- else }}
-            frontend:
-              name: {{ regexReplaceAll "[^A-Za-z0-9]" (get $port_config "frontend") "_" }}
-              {{- with $frontends }}
-              {{- if hasKey . (get $port_config "frontend") }}
-              {{- get . (get $port_config "frontend") | yaml | nindent 14 }}
-              {{- end }}
-              {{- end }}
-            {{- end }}
-            {{ end -}}
-
             domains:
               {{- range $domain := $default_domains }}
                 {{- include "templated-url" (dict "url" (trim $domain) "index" $i "port" $port "container" $container) | indent 14 }}
@@ -103,9 +91,11 @@ entries:
               {{- end }}
             {{- end }}
           {{- end }}
+          {{- end }}
       {{- end }}
       {{- end }}
     {{- end }}
+
   {{- end }}
   {{- end }}
   {{- end }}

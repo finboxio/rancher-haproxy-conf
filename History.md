@@ -1,4 +1,9 @@
 
+0.5.0 / 2021-09-16
+==================
+
+  * Add support for hostname port and explicit https enforcement
+
 0.4.0 / 2021-09-05
 ==================
 

@@ -15,6 +15,9 @@
 {{- if ne "" $url.Password }}
   password: {{ $url.Password }}
 {{- end }}
+{{- if ne 0 $url.Port }}
+  port: {{ $url.Port }}
+{{- end }}
 {{- end -}}
 
 {{- $uuids := dict "me" "me" "leader" "none" "parent" "unavailable" }}

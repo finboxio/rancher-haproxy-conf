@@ -60,7 +60,7 @@ frontend live_check
 
 frontend {{ .frontend.name }}
 
-{{- if or (eq .frontend.protocol "http") (eq .frontend.protocol "https") }}
+{{- if or (eq .frontend.protocol "http") (eq .frontend.protocol "https") (eq .frontend.protocol "https!") }}
 
   ##################################################################################
   # START http-frontend
@@ -71,7 +71,7 @@ frontend {{ .frontend.name }}
   {{- if eq .frontend.protocol "http" }}
   bind *:{{ .frontend.port }}
   {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 accept-proxy {{- end }}
-  {{- else if eq .frontend.protocol "https" }}
+  {{- else if or (eq .frontend.protocol "https") (eq .frontend.protocol "https!") }}
   bind *:{{ .frontend.port }} ssl crt {{ .frontend.certfile }} alpn h2,http/1.1
   bind *:{{ .frontend.port }}0
   {{ if .frontend.proxy -}} bind *:{{ .frontend.port }}1 ssl crt {{ .frontend.certfile }} accept-proxy alpn h2,http/1.1 {{- end }}
@@ -104,7 +104,7 @@ frontend {{ .frontend.name }}
   http-request add-header X-Forwarded-Proto https if is_proxy_https
   http-request add-header X-Forwarded-Proto http unless is_proxy_https
 
-  {{- if eq .frontend.protocol "https" }}
+  {{- if eq .frontend.protocol "https!" }}
   redirect scheme https code 301 if !is_proxy_https
   {{- end }}
 
@@ -132,8 +132,9 @@ frontend {{ .frontend.name }}
   {{ if $domain.scheme -}}
   acl acl_{{ $did }}_https {{ if eq $domain.scheme "https" -}} always_true {{ else -}} always_false {{- end }}
   acl acl_{{ $did }}_https_host {{ if $domain.host }} hdr(host) -i {{ $domain.host }} {{ else }} always_true {{ end }}
+  acl acl_{{ $did }}_https_port {{ if $domain.port }} dst_port {{ $domain.port }} {{ else }} always_true {{ end }}
   acl acl_{{ $did }}_https_path {{ if $domain.prefix }} path_beg -i {{ $domain.prefix }} {{ else }} always_true {{ end }}
-  redirect scheme https code 301 if !is_proxy_https acl_{{ $did }}_https_host acl_{{ $did }}_https_path acl_{{ $did }}_https
+  redirect scheme https code 301 if !is_proxy_https acl_{{ $did }}_https_host acl_{{ $did }}_https_port acl_{{ $did }}_https_path acl_{{ $did }}_https
   {{- end }}
 
   ####
@@ -148,6 +149,7 @@ frontend {{ .frontend.name }}
   {{ if eq (index $domain.host 0) '*' -}} acl acl_{{ $did }}_domain hdr_end(host) -i {{ $domain.host }}
   {{ else -}} acl acl_{{ $did }}_domain hdr(host) -i {{ $domain.host }} {{- end }}
   {{ else -}} acl acl_{{ $did }}_domain always_false {{- end }}
+  acl acl_{{ $did }}_port {{ if $domain.port }} dst_port {{ $domain.port }} {{ else }} always_true {{ end }}
 
   ####
   # END host-acls
@@ -188,7 +190,7 @@ frontend {{ .frontend.name }}
 
   {{- range .domains }}
   {{- $did := printf "%s_%s" $frontend.frontend.name .domain.id }}
-  use_backend {{ $did }} if acl_{{ $did }}_domain acl_{{ $did }}_path
+  use_backend {{ $did }} if acl_{{ $did }}_domain acl_{{ $did }}_port acl_{{ $did }}_path
   {{- end }}
 
   default_backend fallback
@@ -240,7 +242,7 @@ frontend {{ .frontend.name }}
 {{- $did := printf "%s_%s" $frontend.frontend.name .domain.id }}
 
 backend {{ $did }}
-  {{- if or (eq $frontend.frontend.protocol "http") (eq $frontend.frontend.protocol "https") }}
+  {{- if or (eq $frontend.frontend.protocol "http") (eq $frontend.frontend.protocol "https") (eq $frontend.frontend.protocol "https!") }}
   mode http
   retries 5
   option redispatch

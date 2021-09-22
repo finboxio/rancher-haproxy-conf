@@ -34,6 +34,10 @@ listen stats
   mode http
   stats uri {{ if .stats.path }}{{ .stats.path }}{{ else }}/{{ end }}
   stats admin if {{ if .stats.admin -}} TRUE {{ else -}} FALSE {{ end }}
+  {{- if .stats.prometheus }}
+  option http-use-htx
+  http-request use-service prometheus-exporter if { path /metrics }
+  {{- end }}
 
 #####
 # END stats

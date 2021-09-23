@@ -1,4 +1,12 @@
 
+0.7.0 / 2021-09-22
+==================
+
+  * Fix wildcard host support
+  * ignore non-https domains wrt letsencrypt
+  * security for x-forwarded-for header
+  * rewrite host to x-forwarded-host
+
 0.6.0 / 2021-09-22
 ==================
 

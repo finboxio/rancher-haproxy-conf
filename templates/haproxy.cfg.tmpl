@@ -83,6 +83,28 @@ frontend {{ .frontend.name }}
   {{- end }}
 
   ########################################################################
+  # START proxy-protocol
+  ########################################################################
+
+  acl is_proxy_https ssl_fc
+  acl xff_exists hdr_cnt(X-Forwarded-For) gt 0
+  acl xfh_exists hdr_cnt(X-Forwarded-Host) gt 0
+  acl xff_accept {{- if hasKey .frontend "xffToken" }} hdr(X-XFF-Token) {{ .frontend.xffToken }} {{- else }} always_true {{- end }}
+  http-request set-header X-Forwarded-For %[src] if !xff_exists
+  http-request set-header X-Forwarded-For %[src] if !xff_accept
+  http-request add-header X-Forwarded-For %[src] if xff_exists xff_accept
+  http-request set-header X-Original-IP %[hdr(x-forwarded-for,1)]
+  http-request set-header X-Forwarded-Port %[dst_port]
+  http-request add-header X-Forwarded-Proto https if is_proxy_https
+  http-request add-header X-Forwarded-Proto http unless is_proxy_https
+  http-request set-header X-Original-Host %[hdr(host)]
+  http-request set-header host %[hdr(x-forwarded-host)] if xfh_exists
+
+  ####
+  # END proxy-protocol
+  ####
+
+  ########################################################################
   # START frontend-options
   ########################################################################
 
@@ -96,25 +118,9 @@ frontend {{ .frontend.name }}
   # END frontend-options
   ####
 
-  ########################################################################
-  # START proxy-protocol
-  ########################################################################
-
-  acl is_proxy_https ssl_fc
-  acl xff_exists hdr_cnt(X-Forwarded-For) gt 0
-  http-request set-header host %[hdr(host),field(1,:)]
-  http-request add-header X-Forwarded-For %[src] unless xff_exists
-  http-request set-header X-Forwarded-Port %[dst_port]
-  http-request add-header X-Forwarded-Proto https if is_proxy_https
-  http-request add-header X-Forwarded-Proto http unless is_proxy_https
-
   {{- if eq .frontend.protocol "https!" }}
   redirect scheme https code 301 if !is_proxy_https
   {{- end }}
-
-  ####
-  # END proxy-protocol
-  ####
 
   ########################################################################
   # START backend-acls
@@ -135,7 +141,7 @@ frontend {{ .frontend.name }}
 
   {{ if $domain.scheme -}}
   acl acl_{{ $did }}_https {{ if eq $domain.scheme "https" -}} always_true {{ else -}} always_false {{- end }}
-  acl acl_{{ $did }}_https_host {{ if $domain.host }} hdr(host) -i {{ $domain.host }} {{ else }} always_true {{ end }}
+  acl acl_{{ $did }}_https_host {{ if $domain.host }} hdr(host) -i {{ $domain.host }}{{ if $domain.port }}:{{ $domain.port }}{{ end }} {{ else }} always_true {{ end }}
   acl acl_{{ $did }}_https_port {{ if $domain.port }} dst_port {{ $domain.port }} {{ else }} always_true {{ end }}
   acl acl_{{ $did }}_https_path {{ if $domain.prefix }} path_beg -i {{ $domain.prefix }} {{ else }} always_true {{ end }}
   redirect scheme https code 301 if !is_proxy_https acl_{{ $did }}_https_host acl_{{ $did }}_https_port acl_{{ $did }}_https_path acl_{{ $did }}_https
@@ -150,8 +156,8 @@ frontend {{ .frontend.name }}
   ############################################
 
   {{ if $domain.host -}}
-  {{ if eq (index $domain.host 0) '*' -}} acl acl_{{ $did }}_domain hdr_end(host) -i {{ $domain.host }}
-  {{ else -}} acl acl_{{ $did }}_domain hdr(host) -i {{ $domain.host }} {{- end }}
+  {{ if eq (index $domain.host 0) '*' -}} acl acl_{{ $did }}_domain hdr_end(host) -i {{ trimPrefix "*" $domain.host }}
+  {{ else -}} acl acl_{{ $did }}_domain hdr(host) -i {{ $domain.host }}{{ if $domain.port }}:{{ $domain.port }}{{ end }} {{- end }}
   {{ else -}} acl acl_{{ $did }}_domain always_false {{- end }}
   acl acl_{{ $did }}_port {{ if $domain.port }} dst_port {{ $domain.port }} {{ else }} always_true {{ end }}
 

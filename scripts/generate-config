@@ -42,8 +42,7 @@ yq r /etc/rancher-conf/haproxy/state.yml stats \
   | yq p - stats \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
 
-gotpl /etc/rancher-conf/templates/haproxy.cfg.tmpl \
-  < /etc/rancher-conf/haproxy/haproxy.yml \
+gotpl /etc/rancher-conf/templates/haproxy.cfg.tmpl -f /etc/rancher-conf/haproxy/haproxy.yml \
   > /etc/rancher-conf/haproxy/.haproxy.cfg
 
 /etc/rancher-conf/scripts/check-haproxy /etc/rancher-conf/haproxy/.haproxy.cfg \

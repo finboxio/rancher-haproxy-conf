@@ -2,7 +2,7 @@
 {{- $safe := (.url | replace "{port}" .port | replace "{index}" (printf "%d" .index) | replace "{environment}" .container.EnvironmentName | replace "{stack}" .container.StackName | replace "{service}" .container.ServiceName | replace "{uuid}" (trunc 8 .container.UUID) | replace "{ip}" (replace "." "-" .container.PrimaryIp)) }}
 {{- $url := url $safe }}
 - id: {{ regexReplaceAll "[^A-Za-z0-9]" $safe "_" }}
-  host: {{ $url.Host }}
+  host: '{{ $url.Host }}'
 {{- if ne "" $url.Scheme }}
   scheme: {{ $url.Scheme }}
 {{- end }}

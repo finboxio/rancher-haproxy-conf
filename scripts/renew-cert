@@ -54,7 +54,7 @@ if [[ "$LEADER" == "$UUID" ]]; then
 
   DOMAINS=$(cat /etc/rancher-conf/haproxy/state.yml \
     | yq r -j - \
-    | jq -r '.entries[]? | .containers[]? | .ingress[]? | select(.frontend.name == "'"$FRONTEND_NAME"'") | .domains[]? | .host' \
+    | jq -r '.entries[]? | .containers[]? | .ingress[]? | select(.frontend.name == "'"$FRONTEND_NAME"'") | .domains[]? | select(.scheme != "http") | .host' \
     | grep -r '\..*\.' \
     | sed 's/[^.]*/*/' \
     | sort \
@@ -63,7 +63,7 @@ if [[ "$LEADER" == "$UUID" ]]; then
 
   ROOTS=$(cat /etc/rancher-conf/haproxy/state.yml \
     | yq r -j - \
-    | jq -r '.entries[]? | .containers[]? | .ingress[]? | select(.frontend.name == "'"$FRONTEND_NAME"'") | .domains[]? | .host' \
+    | jq -r '.entries[]? | .containers[]? | .ingress[]? | select(.frontend.name == "'"$FRONTEND_NAME"'") | .domains[]? | select(.scheme != "http") | .host' \
     | grep -r '^[^.]*\.[^.]*$' \
     | sort \
     | uniq \

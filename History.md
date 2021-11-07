@@ -1,4 +1,9 @@
 
+0.8.0 / 2021-11-07
+==================
+
+  * Support custom backend balancer & retry configuration
+
 0.7.0 / 2021-09-22
 ==================
 

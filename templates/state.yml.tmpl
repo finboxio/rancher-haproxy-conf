@@ -2,6 +2,12 @@
 {{- $safe := (.url | replace "{port}" .port | replace "{index}" (printf "%d" .index) | replace "{environment}" .container.EnvironmentName | replace "{stack}" .container.StackName | replace "{service}" .container.ServiceName | replace "{uuid}" (trunc 8 .container.UUID) | replace "{ip}" (replace "." "-" .container.PrimaryIp)) }}
 {{- $url := url $safe }}
 - id: {{ regexReplaceAll "[^A-Za-z0-9]" $safe "_" }}
+{{- if ne "" .retryon }}
+  retryon: {{ .retryon }}
+{{- end }}
+{{- if ne "" .balance }}
+  balance: {{ .balance }}
+{{- end }}
   host: '{{ $url.Host }}'
 {{- if ne "" $url.Scheme }}
   scheme: {{ $url.Scheme }}
@@ -80,16 +86,16 @@ entries:
               {{- end }}
             domains:
               {{- range $domain := $default_domains }}
-                {{- include "templated-url" (dict "url" (trim $domain) "index" $i "port" $port "container" $container) | indent 14 }}
+                {{- include "templated-url" (dict "url" (trim $domain) "index" $i "port" $port "container" $container "retryon" (get $port_config "retryon") "balance" (get $port_config "balance")) | indent 14 }}
               {{- end }}
               {{- if hasKey $port_config "domains" }}
                 {{- range $part := split "," (get $port_config "domains") }}
-                {{- include "templated-url" (dict "url" (trim $part) "index" $i "port" $port "container" $container) | indent 14 }}
+                {{- include "templated-url" (dict "url" (trim $part) "index" $i "port" $port "container" $container "retryon" (get $port_config "retryon") "balance" (get $port_config "balance")) | indent 14 }}
                 {{- end }}
               {{- end }}
               {{- if hasKey $port_config "domain" }}
                 {{- range $part := split "," (get $port_config "domain") }}
-                {{- include "templated-url" (dict "url" (trim $part) "index" $i "port" $port "container" $container) | indent 14 }}
+                {{- include "templated-url" (dict "url" (trim $part) "index" $i "port" $port "container" $container "retryon" (get $port_config "retryon") "balance" (get $port_config "balance")) | indent 14 }}
                 {{- end }}
               {{- end }}
             {{- end }}

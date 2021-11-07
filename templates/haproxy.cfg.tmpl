@@ -256,6 +256,12 @@ backend {{ $did }}
   mode http
   retries 5
   option redispatch
+  {{- if .domain.retryon }}
+  retry-on {{ .domain.retryon }}
+  {{- end }}
+  {{- if .domain.balance }}
+  balance {{ .domain.balance }}
+  {{- end }}
   {{- end }}
 
   {{- if .domain.user }}

@@ -1,4 +1,9 @@
 
+0.10.0 / 2022-02-04
+==================
+
+  * Tie healthcheck to host state, unhealthy if inactive
+
 0.9.0 / 2022-02-04
 ==================
 

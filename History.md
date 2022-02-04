@@ -1,4 +1,9 @@
 
+0.9.0 / 2022-02-04
+==================
+
+  * Support haproxy healthchecks on host reachability
+
 0.8.0 / 2021-11-07
 ==================
 

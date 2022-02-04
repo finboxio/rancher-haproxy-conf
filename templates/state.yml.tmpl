@@ -55,6 +55,7 @@ parent: {{ get $uuids "parent" }}
   {{- $entries := set $entries "count" (add (get $entries "count") 1) }}
   {{- if le (get $entries "count") 1 }}
 
+enabled: {{ if or (eq self.Host.State "active") (eq self.Host.State "activating") }}true{{ else }}false{{ end }}
 {{- $healthcheckers := (service "healthcheck.healthcheck").Containers }}
 {{- if lt (len $healthcheckers) 1 }}
 healthcheckers: []

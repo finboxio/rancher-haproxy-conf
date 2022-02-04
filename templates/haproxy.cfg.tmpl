@@ -55,10 +55,14 @@ frontend live_check
   mode http
   monitor-uri {{ .health.path }}
 
+  acl inactive_host {{ if .enabled }}always_false{{ else }}always_true{{ end }}
   {{- if gt (len .healthcheckers) 0 }}
   acl bad_healthchecks nbsrv(healthcheckers) lt 1
-  monitor fail if bad_healthchecks
+  monitor fail if bad_healthchecks || inactive_host
+  {{- else }}
+  monitor fail if inactive_host
   {{- end }}
+
 
 backend healthcheckers
   mode tcp

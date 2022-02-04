@@ -36,7 +36,7 @@ version:
 	@echo $(BUILD_VERSION) | tr -d '\r' | tr -d '\n' | tr -d ' '
 
 docker.build:
-	@docker build -t $(DOCKER_VERSION) -t $(DOCKER_LATEST) .
+	@docker buildx build --platform linux/amd64 --push -t $(DOCKER_VERSION) -t $(DOCKER_LATEST) .
 
 docker.push: docker.build
 	@docker push $(DOCKER_VERSION)

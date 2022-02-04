@@ -54,6 +54,23 @@ parent: {{ get $uuids "parent" }}
   {{- $service_labels := get $stack_labels $my_service }}
   {{- $entries := set $entries "count" (add (get $entries "count") 1) }}
   {{- if le (get $entries "count") 1 }}
+
+{{- $healthcheckers := (service "healthcheck.healthcheck").Containers }}
+{{- if lt (len $healthcheckers) 1 }}
+healthcheckers: []
+{{- else if and (eq (len $healthcheckers) 1) (eq (index $healthcheckers 0).Host.Name self.Host.Name) }}
+healthcheckers: []
+{{- else }}
+healthcheckers:
+  {{- range $i, $container := $healthcheckers }}
+  {{- if $container.PrimaryIp }}
+  {{- if ne $container.Host.Name self.Host.Name }}
+  - ip: {{ $container.PrimaryIp }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+{{- end }}
+
 entries:
   {{- end }}
 

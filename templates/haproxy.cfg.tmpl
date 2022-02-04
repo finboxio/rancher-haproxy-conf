@@ -55,6 +55,18 @@ frontend live_check
   mode http
   monitor-uri {{ .health.path }}
 
+  {{- if gt (len .healthcheckers) 0 }}
+  acl bad_healthchecks nbsrv(healthcheckers) lt 1
+  monitor fail if bad_healthchecks
+  {{- end }}
+
+backend healthcheckers
+  mode tcp
+  {{- range $container := .healthcheckers }}
+  server {{ $container.ip }} {{ $container.ip }}:42 check
+  {{- end }}
+
+
 #####
 # END live-check
 #####

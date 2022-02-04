@@ -38,6 +38,10 @@ yq r /etc/rancher-conf/haproxy/state.yml health \
   | yq p - health \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
 
+yq r /etc/rancher-conf/haproxy/state.yml healthcheckers \
+  | yq p - healthcheckers \
+  | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml
+
 yq r /etc/rancher-conf/haproxy/state.yml stats \
   | yq p - stats \
   | yq w -i -s - /etc/rancher-conf/haproxy/haproxy.yml

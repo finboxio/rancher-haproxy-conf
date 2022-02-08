@@ -12,6 +12,8 @@ UUID=$(yq r -j /etc/rancher-conf/haproxy/state.yml uuid | jq -r .)
 LEADER=$(yq r -j /etc/rancher-conf/haproxy/state.yml leader | jq -r .)
 
 touch /etc/rancher-conf/haproxy/${CERT_NAME}.next-sync.timestamp
+touch /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp
+touch /etc/rancher-conf/haproxy/${CERT_NAME}.pem
 
 now=$(date '+%s')
 next=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.next-sync.timestamp)
@@ -27,7 +29,7 @@ fi
 
 echo $now $next
 
-if [ $next -ge $now ]; then
+if [[ $next -ge $now ]]; then
   echo 'waiting for next sync'
   exit 0
 else
@@ -36,15 +38,18 @@ fi
 
 mkdir -p $CERT_DIR
 
+# Execute certbot if leader
 if [[ "$LEADER" == "$UUID" ]]; then
   # Update/renew certificate if necessary
 
+  # Check current certificate expiration and post
+  # slack warning if certificate will expire soon
   if [[ -e /etc/rancher-conf/haproxy/${CERT_NAME}.pem ]]; then
     if [[ "${SLACK_WEBHOOK_URL}" != "" ]]; then
       expire_utc=$(openssl x509 -in /etc/rancher-conf/haproxy/${CERT_NAME}.pem -text -noout | grep After | awk -F' : ' '{ print $2 }')
       expire_unix=$(date -d "$expire_utc" "+%s")
       threshold=$(date -d "$SLACK_ALERT_WINDOW" "+%s")
-      if [ $expire_unix -lt $threshold ]; then
+      if [[ $expire_unix -lt $threshold ]]; then
         curl -X POST \
           -d "{ \"text\": \"${CERT_DIR}/live/${CERT_NAME} will expire on ${expire_utc}\" }" \
           $SLACK_WEBHOOK_URL
@@ -88,11 +93,31 @@ if [[ "$LEADER" == "$UUID" ]]; then
 
   out=$($CMD $ROOTS $DOMAINS)
   echo $out
+fi
 
-  presum=$(md5sum /etc/rancher-conf/haproxy/${CERT_NAME}.pem)
+# Get pre-update checksum of cert
+presum=$(md5sum /etc/rancher-conf/haproxy/${CERT_NAME}.pem)
 
-  certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
-  keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+# Check if current cert has content
+certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
+keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
+if [[ $certlines -gt 0 && $keylines -gt 0 && $version -gt 0 ]]; then
+  live=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
+else
+  live='0'
+fi
+
+# Check timestamp of last update
+version=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp)
+if [[ "$version" == "" ]]; then
+  version='0'
+fi
+
+# If current cert has no content, we don't know the timestamp of current cert,
+# or live cert has updated since last transfer, copy live cert into current cert
+if [[ $certlines -eq 0 || $keylines -eq 0 || $version -eq 0 || $live -gt $version ]]; then
+  certlines='0'
+  keylines='0'
   until [[ $certlines -gt 0 && $keylines -gt 0 ]]; do
     cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/${CERT_NAME}.pem
     certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
@@ -100,35 +125,14 @@ if [[ "$LEADER" == "$UUID" ]]; then
     sleep 1
   done
 
-  postsum=$(md5sum /etc/rancher-conf/haproxy/${CERT_NAME}.pem)
-
-  if [[ "$presum" != "$postsum" ]]; then
-    /etc/rancher-conf/scripts/reload-haproxy
-  fi
-else
-  version=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp)
-  if [[ "$version" == "" ]]; then
-    version='0'
-  fi
-
-  certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
-  keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
-  if [[ $certlines -gt 0 && $keylines -gt 0 ]]; then
-    current=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
-  else
-    current='0'
-  fi
-
-  if [ $current -ge $version ]; then
-    until [[ $certlines -gt 0 && $keylines -gt 0 ]]; do
-      cat ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem ${CERT_DIR}/live/${CERT_NAME}/privkey.pem > /etc/rancher-conf/haproxy/${CERT_NAME}.pem
-      certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
-      keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
-      sleep 1
-    done
-
-    date '+%s' > /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp
-    /etc/rancher-conf/scripts/reload-haproxy
-  fi
+  # Set reload timestamp to last modification time of live cert
+  date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s' > /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp
 fi
 
+# Get post-update checksum of cert
+postsum=$(md5sum /etc/rancher-conf/haproxy/${CERT_NAME}.pem)
+
+# Reload haproxy if cert has changed
+if [[ "$presum" != "$postsum" ]]; then
+  /etc/rancher-conf/scripts/reload-haproxy
+fi

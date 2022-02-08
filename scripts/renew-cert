@@ -98,19 +98,19 @@ fi
 # Get pre-update checksum of cert
 presum=$(md5sum /etc/rancher-conf/haproxy/${CERT_NAME}.pem)
 
-# Check if current cert has content
+# Check timestamp of last update
+version=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp)
+if [[ "$version" == "" ]]; then
+  version='0'
+fi
+
+# Check update timestamp if current cert has content
 certlines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN CERTIFICATE' | wc -l)
 keylines=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.pem | grep 'BEGIN PRIVATE KEY' | wc -l)
 if [[ $certlines -gt 0 && $keylines -gt 0 && $version -gt 0 ]]; then
   live=$(date -r ${CERT_DIR}/live/${CERT_NAME}/fullchain.pem '+%s')
 else
   live='0'
-fi
-
-# Check timestamp of last update
-version=$(cat /etc/rancher-conf/haproxy/${CERT_NAME}.last-reload.timestamp)
-if [[ "$version" == "" ]]; then
-  version='0'
 fi
 
 # If current cert has no content, we don't know the timestamp of current cert,

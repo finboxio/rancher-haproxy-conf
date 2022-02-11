@@ -52,6 +52,7 @@ listen stats
 
 frontend live_check
   bind *:{{ .health.port }}
+  {{ if .health.proxyPort -}} bind *:{{ .health.proxyPort }} accept-proxy {{- end }}
   mode http
   monitor-uri {{ .health.path }}
 

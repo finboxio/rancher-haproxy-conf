@@ -63,12 +63,11 @@ healthcheckers:
   {{- if $container.PrimaryIp }}
   {{- if and (ne $container.Host nil) (ne $container.Host.Name self.Host.Name) }}
   {{- $validCheckers := set $validCheckers "count" (add (get $validCheckers "count") 1) }}
-  {{- end }}
   - ip: {{ $container.PrimaryIp }}
   {{- end }}
   {{- end }}
-  {{- if eq (get $validCheckers "count") 0 }} []{{- end }}
   {{- end }}
+  {{- if eq (get $validCheckers "count") 0 }} []{{- end }}
 {{- end }}
 
 entries:

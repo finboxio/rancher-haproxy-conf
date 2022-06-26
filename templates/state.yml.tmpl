@@ -67,8 +67,8 @@ healthcheckers:
   - ip: {{ $container.PrimaryIp }}
   {{- end }}
   {{- end }}
-  {{- end }}
   {{- if eq (get $validCheckers "count") 0 }} []{{- end }}
+  {{- end }}
 {{- end }}
 
 entries:

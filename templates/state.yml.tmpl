@@ -57,19 +57,17 @@ parent: {{ get $uuids "parent" }}
 
 enabled: {{ if or (eq self.Host.State "active") (eq self.Host.State "activating") }}true{{ else }}false{{ end }}
 {{- $healthcheckers := (service "healthcheck.healthcheck").Containers }}
-{{- if lt (len $healthcheckers) 1 }}
-healthcheckers: []
-{{- else if and (eq (len $healthcheckers) 1) (eq (index $healthcheckers 0).Host.Name self.Host.Name) }}
-healthcheckers: []
-{{- else }}
+{{- $validCheckers := dict "count" 0 }}
 healthcheckers:
   {{- range $i, $container := $healthcheckers }}
   {{- if $container.PrimaryIp }}
-  {{- if ne $container.Host.Name self.Host.Name }}
+  {{- if and (ne $container.Host nil) (ne $container.Host.Name self.Host.Name) }}
+  {{- $validCheckers := set $validCheckers "count" ((get $validCheckers "count") + 1) }}
   - ip: {{ $container.PrimaryIp }}
   {{- end }}
   {{- end }}
   {{- end }}
+  {{- if eq (get $validCheckers "count") 0 }} []{{- end }}
 {{- end }}
 
 entries:

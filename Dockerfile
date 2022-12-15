@@ -1,4 +1,4 @@
-FROM certbot/dns-route53:latest
+FROM certbot/dns-cloudflare:latest
 
 VOLUME /opt/rancher/bin
 VOLUME /etc/rancher-conf/haproxy

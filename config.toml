@@ -4,6 +4,10 @@ onetime = false
 interval = 30
 
 [[ template ]]
+source = "/etc/rancher-conf/templates/cloudflare.ini.tmpl"
+dest = "/etc/rancher-conf/haproxy/cloudflare.ini"
+
+[[ template ]]
 source = "/etc/rancher-conf/templates/state.yml.tmpl"
 dest = "/etc/rancher-conf/haproxy/state.yml"
 notify-cmd = "/etc/rancher-conf/scripts/generate-config"

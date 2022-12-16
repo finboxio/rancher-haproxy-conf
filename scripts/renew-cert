@@ -79,7 +79,6 @@ if [[ "$LEADER" == "$UUID" ]]; then
     --cert-name ${CERT_NAME} \
     --dns-cloudflare \
     --dns-cloudflare-credentials /etc/rancher-conf/haproxy/cloudflare.ini \
-    --dns-cloudflare-propagation-seconds 300 \
     --keep-until-expiring \
     --expand \
     --renew-with-new-domains \

@@ -77,7 +77,8 @@ if [[ "$LEADER" == "$UUID" ]]; then
   CMD="certbot certonly \
     --config-dir ${CERT_DIR} \
     --cert-name ${CERT_NAME} \
-    --dns-route53 \
+    --dns-cloudflare \
+    --dns-cloudflare-credentials /etc/rancher-conf/haproxy/cloudflare.ini \
     --keep-until-expiring \
     --expand \
     --renew-with-new-domains \
